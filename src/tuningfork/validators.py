@@ -190,6 +190,61 @@ class SymbolValidator:
         return findings
 
 
+class EchoValidator:
+    """Repetition as a structural drift signal.
+
+    Origin: a lived leading indicator — the earliest detectable sign of an
+    auditory hallucination is often not its content but its texture: a
+    slight echo, repetition where none should be. The machine analog is
+    well documented: models drifting into fabrication loop phrases,
+    re-assert identical claims without new evidence, and echo the prompt's
+    framing back. Content varies endlessly; the echo is structural.
+
+    Two checks:
+      * internal echo  — a sentence (normalized) recurring within one output
+      * stale echo     — a sentence recurring verbatim from a *previous*
+                         output that validators already rejected, i.e. the
+                         narrative re-asserting itself without new evidence
+    """
+
+    name = "echo"
+    _SENT = re.compile(r"[^.!?\n]{20,}[.!?]")  # sentences of substance only
+
+    def __init__(self, rejected_history: Iterable[str] = ()):
+        self.rejected: set[str] = set()
+        for prior in rejected_history:
+            self.rejected.update(self._normalize(s)
+                                 for s in self._SENT.findall(prior))
+
+    @staticmethod
+    def _normalize(s: str) -> str:
+        return re.sub(r"\s+", " ", s).strip().lower()
+
+    def run(self, output: str) -> list[Finding]:
+        findings = []
+        seen: set[str] = set()
+        for sent in self._SENT.findall(output):
+            norm = self._normalize(sent)
+            if norm in seen:
+                findings.append(Finding(
+                    validator=self.name, claim=sent.strip()[:80],
+                    passed=False, severity="medium",
+                    evidence="internal echo: sentence repeats within output",
+                ))
+            elif norm in self.rejected:
+                findings.append(Finding(
+                    validator=self.name, claim=sent.strip()[:80],
+                    passed=False, severity="high",
+                    evidence="stale echo: re-asserts a previously rejected "
+                             "claim with no new evidence",
+                ))
+            seen.add(norm)
+        if not findings:
+            findings.append(Finding(self.name, "(whole output)", True,
+                                    "no echo detected"))
+        return findings
+
+
 # --------------------------------------------------------------------------
 # Runner
 # --------------------------------------------------------------------------

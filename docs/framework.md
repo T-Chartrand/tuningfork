@@ -48,7 +48,22 @@ Where two rules mandate different amounts of verification work, G6 (the budget) 
 - **Fallback cap:** where no independent channel exists, at most ONE regeneration pass; if the regenerated draft still fails, state the specific limitation instead of regenerating again.
 - The self-check itself is a read-only review and requires no tool confirmation (see G2 base case).
 
-## 7. Grounding Rules (G1–G7)
+## 7. Grounding Rules (G0–G7)
+
+### G0 — Asymmetric Trust (governs all checking)
+**Content can convict, but it can never acquit.** Coherence, fluency, and
+plausibility are what fabrication is optimized for — the more embedded in
+truth a false claim is, the more dangerous, because believability is the
+attack surface, not a safety signal. Therefore:
+- A claim is **trusted only by source**: it traces to a tool result, a
+  document in context, or a deterministic computation. Nothing else grants
+  trust — not how sensible it sounds, not how well it fits.
+- Content checks run **one-directional**: an implausible or too-perfect
+  claim may be flagged and escalated, but a plausible one earns nothing.
+- Validator ordering follows: provenance checks (source-tracing) always run;
+  plausibility heuristics only ever *raise* tiers (G6), never lower them.
+Verification without validation is dangerous: locating *a* source is not
+enough — the source must actually have produced the claim attributed to it.
 
 A correction from the user, or a detected internal inconsistency, is treated as a hallucination signal. The following rules apply continuously. These rules are fixed; amendments occur only by explicit user instruction, never by agent self-modification.
 
@@ -88,6 +103,7 @@ Alongside generation, run cheap deterministic validators on an independent chann
 - every citation index references a source that exists in context;
 - every file path mentioned appeared in a prior tool result;
 - generated JSON/YAML parses; generated code passes lint/compile;
-- every referenced function, flag, or endpoint resolves against the actual codebase or schema.
+- every referenced function, flag, or endpoint resolves against the actual codebase or schema;
+- **no echo**: no sentence repeats within an output, and no previously rejected claim is re-asserted without new evidence. Repetition is a structural drift signature — fabrication's content varies endlessly, but its texture (looping, re-assertion, echoing the prompt back) is detectable and cheap to catch. It is also a *leading* indicator: echo often appears before outright fabrication does.
 Validators report binary facts only and do not ask the generation process for permission to run. They are deterministic and low-cost, so they run at **every** tier, including Low — they sit below the G6 budget rather than inside it.
 A validator miss is treated as a hallucination signal: it auto-triggers G4 (existence probe) at Medium tier or G5 (snapshot rebuild) at High tier. The monitor that matters is the one outside the narrative — the generator cannot be trusted to notice its own drift from within it.

@@ -62,3 +62,31 @@ def test_harness_clean_pass_costs_one_call():
     bank = ValidatorBank([CitationValidator(valid_source_ids=["1"])])
     result = GroundedAgent(honest, bank).run("summarize source [1] v1.2")
     assert result.trustworthy and not result.regenerated
+
+
+def test_echo_validator_internal_repetition():
+    from tuningfork import EchoValidator
+    v = EchoValidator()
+    out = ("The configuration lives in the main settings file. "
+           "Some other sentence with enough length to count here. "
+           "The configuration lives in the main settings file.")
+    fails = [f for f in v.run(out) if not f.passed]
+    assert len(fails) == 1 and "internal echo" in fails[0].evidence
+
+
+def test_echo_validator_stale_reassertion():
+    from tuningfork import EchoValidator
+    rejected = "Per source nine, the settings live in the secret config file."
+    v = EchoValidator(rejected_history=[rejected])
+    out = "Per source nine, the settings live in the secret config file."
+    fails = [f for f in v.run(out) if not f.passed]
+    assert len(fails) == 1
+    assert "stale echo" in fails[0].evidence and fails[0].severity == "high"
+
+
+def test_echo_validator_clean_output_passes():
+    from tuningfork import EchoValidator
+    v = EchoValidator()
+    out = ("The first sentence says one particular thing here. "
+           "The second sentence says something entirely different.")
+    assert all(f.passed for f in v.run(out))

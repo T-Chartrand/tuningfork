@@ -99,3 +99,29 @@ def test_anthropic_llm_surfaces_api_errors_readably(monkeypatch):
         msg = str(e)
         assert "401" in msg and "invalid x-api-key" in msg
         assert "console.anthropic.com" in msg     # the hint travels
+
+
+def test_openai_compat_message_and_response_translation():
+    from tuningfork import OpenAICompatibleLLM as L
+    msgs = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": [
+            {"type": "text", "text": "checking"},
+            {"type": "tool_use", "id": "c1", "name": "read_file",
+             "input": {"path": "a.txt"}}]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "c1",
+             "content": "file body", "is_error": False}]},
+    ]
+    conv = L._convert_messages(msgs, system="be good")
+    assert conv[0] == {"role": "system", "content": "be good"}
+    assert conv[2]["tool_calls"][0]["function"]["name"] == "read_file"
+    assert conv[3] == {"role": "tool", "tool_call_id": "c1",
+                       "content": "file body"}
+    norm = L._normalize({"choices": [{"message": {
+        "content": None,
+        "tool_calls": [{"id": "x", "function": {
+            "name": "list_dir", "arguments": "{\"path\": \".\"}"}}]}}]})
+    assert norm["content"][0] == {"type": "tool_use", "id": "x",
+                                  "name": "list_dir", "input": {"path": "."}}
+    assert norm["stop_reason"] == "tool_use"

@@ -258,3 +258,113 @@ class ChildAgent:
                            corrected=corrected,
                            unresolved=["max turns reached"],
                            transcript=messages)
+
+
+class OpenAICompatibleLLM:
+    """Any OpenAI-compatible chat endpoint: Ollama (default), Groq,
+    OpenRouter, LM Studio, vLLM. Translates to/from the Anthropic
+    message shape the agent loop speaks, so the loop never changes.
+
+    Ollama (local, free, no key):
+        llm = OpenAICompatibleLLM(model="qwen2.5:7b")
+    Groq free tier:
+        llm = OpenAICompatibleLLM(
+            base_url="https://api.groq.com/openai/v1",
+            model="llama-3.3-70b-versatile",
+            api_key=os.environ["GROQ_API_KEY"])
+    """
+
+    def __init__(self, model: str = "qwen2.5:7b",
+                 base_url: str = "http://localhost:11434/v1",
+                 api_key: str = "none", max_tokens: int = 2048):
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.max_tokens = max_tokens
+
+    # -- Anthropic-shape -> OpenAI-shape ------------------------------------
+    @staticmethod
+    def _convert_messages(messages: list[dict], system: str) -> list[dict]:
+        out = [{"role": "system", "content": system}] if system else []
+        for m in messages:
+            role, content = m["role"], m["content"]
+            if isinstance(content, str):
+                out.append({"role": role, "content": content})
+                continue
+            if role == "assistant":
+                text = "\n".join(b.get("text", "") for b in content
+                                 if b.get("type") == "text").strip()
+                calls = [{"id": b.get("id", ""), "type": "function",
+                          "function": {"name": b.get("name", ""),
+                                       "arguments": json.dumps(b.get("input", {}))}}
+                         for b in content if b.get("type") == "tool_use"]
+                msg = {"role": "assistant", "content": text or None}
+                if calls:
+                    msg["tool_calls"] = calls
+                out.append(msg)
+            else:  # user turn: plain text and/or tool results
+                texts = []
+                for b in content:
+                    if b.get("type") == "tool_result":
+                        body = b.get("content", "")
+                        if b.get("is_error"):
+                            body = "ERROR: " + body
+                        out.append({"role": "tool",
+                                    "tool_call_id": b.get("tool_use_id", ""),
+                                    "content": body})
+                    elif b.get("type") == "text":
+                        texts.append(b.get("text", ""))
+                if texts:
+                    out.append({"role": "user", "content": "\n".join(texts)})
+        return out
+
+    # -- OpenAI-shape -> Anthropic-shape -------------------------------------
+    @staticmethod
+    def _normalize(resp: dict) -> dict:
+        msg = resp["choices"][0]["message"]
+        content: list[dict] = []
+        if msg.get("content"):
+            content.append({"type": "text", "text": msg["content"]})
+        for tc in msg.get("tool_calls") or []:
+            fn = tc.get("function", {})
+            try:
+                args = json.loads(fn.get("arguments") or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            content.append({"type": "tool_use", "id": tc.get("id", ""),
+                            "name": fn.get("name", ""), "input": args})
+        stop = "tool_use" if msg.get("tool_calls") else "end_turn"
+        return {"content": content, "stop_reason": stop}
+
+    def __call__(self, messages: list[dict], tools: list[dict],
+                 system: str) -> dict:
+        body = {"model": self.model, "max_tokens": self.max_tokens,
+                "messages": self._convert_messages(messages, system)}
+        if tools:
+            body["tools"] = [{"type": "function", "function": {
+                "name": t["name"], "description": t.get("description", ""),
+                "parameters": t.get("input_schema",
+                                    {"type": "object", "properties": {}})}}
+                for t in tools]
+        req = urllib.request.Request(
+            self.base_url + "/chat/completions",
+            data=json.dumps(body).encode(),
+            headers={"content-type": "application/json",
+                     "authorization": f"Bearer {self.api_key}"})
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r:
+                return self._normalize(json.loads(r.read()))
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode()[:300]
+            except Exception:                       # noqa: BLE001
+                pass
+            raise RuntimeError(
+                f"LLM endpoint HTTP {e.code} at {self.base_url}: "
+                f"{detail or e.reason}") from None
+        except urllib.error.URLError as e:
+            raise RuntimeError(
+                f"Cannot reach {self.base_url} ({e.reason}). If using "
+                f"Ollama: install it, run 'ollama serve', and pull a "
+                f"tool-capable model (e.g. 'ollama pull qwen2.5:7b').") from None

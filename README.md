@@ -80,10 +80,15 @@ improvised, one evidence-fed correction turn is permitted, and
 rejections persist to a ledger file across sessions — the catalog of
 known fabrications accumulates instead of resetting.
 
-```python
-from tuningfork import AnthropicLLM, ChildAgent, builtin_fs_tools
+No API key or paid account required — the transport is pluggable, and an
+OpenAI-compatible adapter covers Ollama (local, free), Groq, OpenRouter,
+LM Studio, and vLLM:
 
-agent = ChildAgent(AnthropicLLM(), builtin_fs_tools("."))
+```python
+from tuningfork import ChildAgent, OpenAICompatibleLLM, builtin_fs_tools
+
+llm = OpenAICompatibleLLM(model="qwen2.5:7b")   # Ollama on localhost
+agent = ChildAgent(llm, builtin_fs_tools("."))
 result = agent.run("Which files in ./docs mention 'echo'? Cite paths.")
 print(result.trustworthy, result.answer)
 ```

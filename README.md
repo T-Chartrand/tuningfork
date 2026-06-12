@@ -25,10 +25,11 @@ code cannot. One deterministic confirmation from an independent channel is
 that: the environment is the source of truth, and the model's memory is a
 cache that may be stale.
 
-## The seven rules
+## The nine rules
 
 | Rule | Phase | One-liner |
 |------|-------|-----------|
+| **G0** Asymmetric Trust | governs all | Content can convict, but never acquit — trust flows from source-tracing only |
 | **G1** Verify-Before-Assert | foresee | A claim that *could* be tool-checked *must* be, before it's stated |
 | **G2** Closed-Loop Execution | recognize | Report observed results, never issued commands. Read-only observations are terminal |
 | **G3** Disagreement Triangulation | recognize | Tool beats memory; one independent check on surprises; one deterministic confirmation is final |
@@ -36,8 +37,9 @@ cache that may be stale.
 | **G5** Reproducibility Snapshot | snap out | After a correction, rebuild state from tool output only — nothing from the broken narrative carries over |
 | **G6** Cost-Tiered Budget | continuous | Tier verification by blast radius, decided *before* generation; suspiciously perfect claims get their tier raised |
 | **G7** Passive Independent Validators | continuous | Cheap deterministic monitors run on everything and never ask the generator's permission |
+| **G8** Source Re-attribution | after the verdict | A verified-false output is evidence about the generator — mine it; belief and action are decoupled |
 
-Full text with rationale: [`docs/framework.md`](docs/framework.md)
+Full text with rationale: [`docs/framework.md`](docs/framework.md) · The story behind it: [`docs/essay.md`](docs/essay.md)
 
 ## Quick start
 
@@ -80,7 +82,7 @@ check.
 
 ## Status
 
-`v0.1.0` — reference implementation, 7/7 tests passing, stdlib only.
+`v0.2.0` — reference implementation, 12/12 tests passing, stdlib only. Includes EchoValidator (repetition as a structural leading indicator) and RejectionLedger (the G4 catalog accumulates from mined rejections).
 Roadmap: coverage validator (evidence the response *ignored*), async
 validator bank, adapters for popular agent frameworks.
 

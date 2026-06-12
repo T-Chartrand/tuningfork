@@ -6,7 +6,7 @@ Humans who must routinely distinguish real perception from convincing internal
 fabrication have spent decades refining practical checks for it. Those checks
 turn out to map directly onto the agent hallucination problem — often more
 cleanly than the framings in the ML literature. `tuningfork` is that mapping,
-written down as seven rules and shipped as a small, dependency-free Python
+written down as nine rules and shipped as a small, dependency-free Python
 reference implementation.
 
 The name comes from one of those human techniques: a physical tuning fork held
@@ -82,7 +82,7 @@ check.
 
 ## Status
 
-`v0.2.0` — reference implementation, 12/12 tests passing, stdlib only. Includes EchoValidator (repetition as a structural leading indicator) and RejectionLedger (the G4 catalog accumulates from mined rejections).
+`v0.2.0` — reference implementation, full test suite passing, stdlib only. Includes EchoValidator (repetition as a structural leading indicator) and RejectionLedger (the G4 catalog accumulates from mined rejections).
 Roadmap: coverage validator (evidence the response *ignored*), async
 validator bank, adapters for popular agent frameworks.
 

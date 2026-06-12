@@ -146,3 +146,22 @@ def test_docs_rule_count_consistency():
     words = {7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve"}
     assert f"The {words[n]} rules" in readme, (
         f"README heading disagrees with actual rule count {n}")
+
+
+def test_docs_no_stale_rule_or_test_counts():
+    """Specimens 2 and 3 of the stale-count class: prose mentions of
+    'N rules' anywhere, and hardcoded test counts. Prose must agree with
+    the actual section count; test counts must not appear at all."""
+    import re, pathlib
+    root = pathlib.Path(__file__).resolve().parents[1]
+    fw = (root / "docs" / "framework.md").read_text()
+    readme = (root / "README.md").read_text()
+    n = len(re.findall(r"^### (G\d+) —", fw, re.M))
+    words = {7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve"}
+    wrong = [w for k, w in words.items() if k != n]
+    for doc_name, doc in (("README.md", readme), ("framework.md", fw)):
+        for w in wrong:
+            assert not re.search(rf"\b{w} rules\b", doc, re.I), (
+                f"{doc_name} says '{w} rules' but there are {n}")
+    assert not re.search(r"\b\d+/\d+ tests?\b", readme), (
+        "README hardcodes a test count — it goes stale every commit; remove it")

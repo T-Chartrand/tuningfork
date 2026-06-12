@@ -107,3 +107,23 @@ Alongside generation, run cheap deterministic validators on an independent chann
 - **no echo**: no sentence repeats within an output, and no previously rejected claim is re-asserted without new evidence. Repetition is a structural drift signature — fabrication's content varies endlessly, but its texture (looping, re-assertion, echoing the prompt back) is detectable and cheap to catch. It is also a *leading* indicator: echo often appears before outright fabrication does.
 Validators report binary facts only and do not ask the generation process for permission to run. They are deterministic and low-cost, so they run at **every** tier, including Low — they sit below the G6 budget rather than inside it.
 A validator miss is treated as a hallucination signal: it auto-triggers G4 (existence probe) at Medium tier or G5 (snapshot rebuild) at High tier. The monitor that matters is the one outside the narrative — the generator cannot be trusted to notice its own drift from within it.
+
+### G8 — Source Re-attribution (after the verdict)
+A verified-false output is not discarded as noise. It is **re-attributed**:
+its claims stop being evidence about the world and become evidence about
+the generator — its priors, its biases, the direction of its drift. Then
+it is **mined**:
+- Rejected outputs accumulate in a ledger across the session.
+- Recurring fabrications graduate into known signatures. The G4 catalog is
+  therefore *accumulated from processed rejections*, not hand-written —
+  each verified-false experience, mined instead of merely dismissed,
+  becomes recognizable the next time.
+- The ledger feeds echo detection: re-asserting a mined fabrication
+  without new evidence is caught at high severity.
+
+The principle underneath: **belief and action are decoupled.** The system
+never requires the generator to stop producing the false signal — it
+cannot; re-queried, the model will fluently re-assert. It requires only
+that actions trace to verified sources. The generator's internal
+conviction is not load-bearing. Rejected content updates the model of the
+model; it never updates the world model.

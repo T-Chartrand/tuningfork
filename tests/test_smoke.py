@@ -90,3 +90,32 @@ def test_echo_validator_clean_output_passes():
     out = ("The first sentence says one particular thing here. "
            "The second sentence says something entirely different.")
     assert all(f.passed for f in v.run(out))
+
+
+def test_ledger_builds_known_signatures_from_recurrence():
+    from tuningfork import (CitationValidator, RejectionLedger, ValidatorBank,
+                            EchoValidator)
+    bank = ValidatorBank([CitationValidator(valid_source_ids=["1"])])
+    ledger = RejectionLedger(recurrence_threshold=2)
+    out = "Per [9], the flag exists and this is certainly documented somewhere."
+    for _ in range(2):                       # same fabrication, twice
+        report = bank.run(out)
+        ledger.record(out, report)
+    assert "[9]" in ledger.known_signatures()          # graduated to 'known'
+    prof = ledger.profile()
+    assert prof.total_rejections == 2
+    assert prof.rejections_by_validator["citation"] == 2
+    # ledger feeds echo detection: re-asserting the mined fabrication
+    echo = EchoValidator(rejected_history=ledger.rejected_outputs)
+    fails = [f for f in echo.run(out) if not f.passed]
+    assert fails and fails[0].severity == "high"
+
+
+def test_ledger_ignores_clean_reports():
+    from tuningfork import CitationValidator, RejectionLedger, ValidatorBank
+    bank = ValidatorBank([CitationValidator(valid_source_ids=["1"])])
+    ledger = RejectionLedger()
+    report = bank.run("Per [1], all good.")
+    ledger.record("Per [1], all good.", report)
+    assert ledger.profile().total_rejections == 0
+    assert ledger.known_signatures() == []

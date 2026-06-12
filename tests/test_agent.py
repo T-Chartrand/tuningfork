@@ -125,3 +125,31 @@ def test_openai_compat_message_and_response_translation():
     assert norm["content"][0] == {"type": "tool_use", "id": "x",
                                   "name": "list_dir", "input": {"path": "."}}
     assert norm["stop_reason"] == "tool_use"
+
+
+def test_tool_equipped_run_floors_tier_and_always_mines(tmp_path):
+    # Task text matches no catalog signature -> would price LOW; with tools
+    # it must floor to MEDIUM, the correction turn must arm, and the
+    # rejection must reach the ledger.
+    llm = scripted_llm([
+        {"content": [text("The notes live in /nowhere/fabricated_notes.txt.")]},
+        {"content": [text("I cannot verify that file with my tools.")]},
+    ])
+    agent = ChildAgent(llm, builtin_fs_tools(tmp_path),
+                       ledger_path=tmp_path / "l.json")
+    res = agent.run("where are the notes")          # no catalog hits
+    assert "MEDIUM" in res.tier_rationale and "floored" in res.tier_rationale
+    assert res.corrected is True
+    assert agent.ledger.profile().total_rejections >= 1
+
+
+def test_unresolved_surfaces_the_failing_claim(tmp_path):
+    llm = scripted_llm([
+        {"content": [text("See /nowhere/ghost.txt for details. v3.1")]},
+        {"content": [text("Still: /nowhere/ghost.txt has it. v3.1")]},
+    ])
+    agent = ChildAgent(llm, [], ledger_path=tmp_path / "l.json")
+    res = agent.run("where v3.1")
+    assert res.unresolved
+    assert "ghost.txt" in res.unresolved[0]         # the claim is visible
+    assert "[path]" in res.unresolved[0]            # and which validator

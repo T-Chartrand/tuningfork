@@ -203,6 +203,12 @@ class ChildAgent:
     # -- the loop ------------------------------------------------------------
     def run(self, task: str, destructive: bool = False) -> AgentResult:
         tier = assess(task, destructive=destructive)
+        if self.tools and tier.tier < Tier.MEDIUM:
+            # An agent with tools will make specific factual claims about
+            # tool results; conceptual-LOW pricing never applies here.
+            tier.tier = Tier.MEDIUM
+            tier.rationale += "; floored to MEDIUM (tool-equipped run)"
+
         messages: list[dict] = [{"role": "user", "content": task}]
         specs = [t.spec() for t in self.tools.values()]
         reports: list[ValidationReport] = []
@@ -221,17 +227,18 @@ class ChildAgent:
             if text.strip():
                 report = self._bank().run(text)
                 reports.append(report)
-                if not report.clean and tier.tier >= Tier.MEDIUM:
-                    self.ledger.record(text, report)
-                    if not corrected and not tool_uses:
-                        corrected = True          # G5: ONE correction turn
-                        messages.append({"role": "user", "content":
-                            "[GROUNDING] Independent validators rejected "
-                            "claims in your answer. Their findings are "
-                            "evidence, not suggestions. Do not re-assert a "
-                            "rejected claim unless a tool result supports "
-                            "it.\n" + report.summary()})
-                        continue
+                if not report.clean:
+                    self.ledger.record(text, report)   # G8: always mine
+                if (not report.clean and tier.tier >= Tier.MEDIUM
+                        and not corrected and not tool_uses):
+                    corrected = True              # G5: ONE correction turn
+                    messages.append({"role": "user", "content":
+                        "[GROUNDING] Independent validators rejected "
+                        "claims in your answer. Their findings are "
+                        "evidence, not suggestions. Do not re-assert a "
+                        "rejected claim unless a tool result supports "
+                        "it.\n" + report.summary()})
+                    continue
 
             if tool_uses:
                 results = []
@@ -246,7 +253,8 @@ class ChildAgent:
 
             # end turn: finalize
             self.ledger.save(self.ledger_path)
-            unresolved = ([f.evidence for f in reports[-1].failures]
+            unresolved = ([f"[{f.validator}] {f.claim!r}: {f.evidence}"
+                           for f in reports[-1].failures]
                           if reports and not reports[-1].clean else [])
             return AgentResult(answer=text, tier_rationale=tier.rationale,
                                reports=reports, corrected=corrected,

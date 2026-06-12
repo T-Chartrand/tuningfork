@@ -1,0 +1,82 @@
+"""Child-agent tests: the overlay catching a live(-shaped) fabricator,
+G4 tool-existence refusal, MCP round trip, ledger persistence."""
+import json, pathlib, sys
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "src"))
+
+from tuningfork import (ChildAgent, MCPServer, Tool, builtin_fs_tools,
+                        mcp_tools)
+
+FIX = pathlib.Path(__file__).parent / "fixtures"
+
+
+def scripted_llm(turns):
+    """LLM double: yields scripted responses in order."""
+    it = iter(turns)
+    def call(messages, tools, system):
+        return next(it)
+    return call
+
+
+def text(t): return {"type": "text", "text": t}
+def tooluse(name, args, i="t1"):
+    return {"type": "tool_use", "id": i, "name": name, "input": args}
+
+
+def test_agent_catches_fabricated_path_and_corrects(tmp_path):
+    (tmp_path / "real.txt").write_text("contents")
+    llm = scripted_llm([
+        # turn 1: fabricates a path that no tool ever returned
+        {"content": [text("The config is at /opt/secret/made_up.yaml.")]},
+        # turn 2 (after grounding correction): uses tools properly
+        {"content": [tooluse("list_dir", {"path": "."})]},
+        # turn 3: grounded answer referencing the real file
+        {"content": [text(f"The directory contains real.txt at {tmp_path}/real.txt.")]},
+    ])
+    agent = ChildAgent(llm, builtin_fs_tools(tmp_path),
+                       ledger_path=tmp_path / "ledger.json")
+    res = agent.run("Where is the config? v1.0")   # catalog hit -> MEDIUM
+    assert res.corrected is True                    # one correction turn fired
+    assert res.trustworthy                          # final answer validated
+    assert "real.txt" in res.answer
+    # G8: the fabrication was mined into the persistent ledger
+    led = json.loads((tmp_path / "ledger.json").read_text())
+    assert any("made_up.yaml" in c for c in led["claims"])
+
+
+def test_agent_refuses_nonexistent_tool(tmp_path):
+    llm = scripted_llm([
+        {"content": [tooluse("delete_everything", {})]},
+        {"content": [text("That tool does not exist; I cannot do that.")]},
+    ])
+    agent = ChildAgent(llm, builtin_fs_tools(tmp_path),
+                       ledger_path=tmp_path / "ledger.json")
+    res = agent.run("clean up")
+    # the refusal travelled back as an is_error tool_result
+    tool_results = [b for m in res.transcript if isinstance(m["content"], list)
+                    for b in m["content"] if isinstance(b, dict)
+                    and b.get("type") == "tool_result"]
+    assert tool_results and tool_results[0]["is_error"] is True
+    assert "DOES NOT EXIST" in tool_results[0]["content"]
+
+
+def test_mcp_round_trip():
+    srv = MCPServer([sys.executable, str(FIX / "fake_mcp_server.py")], name="fake")
+    srv.start()
+    try:
+        tools = mcp_tools(srv)
+        assert tools[0].name == "fake__greet"
+        assert tools[0].fn({"name": "tyrrell"}) == "hello tyrrell"
+    finally:
+        srv.stop()
+
+
+def test_ledger_persists_across_agent_instances(tmp_path):
+    llm1 = scripted_llm([
+        {"content": [text("See /fake/path/one.txt for details.")]},
+        {"content": [text("I could not verify that path.")]},
+    ])
+    a1 = ChildAgent(llm1, [], ledger_path=tmp_path / "l.json")
+    a1.run("where? v2.0")
+    # fresh instance loads the prior session's rejections (the library)
+    a2 = ChildAgent(scripted_llm([]), [], ledger_path=tmp_path / "l.json")
+    assert any("one.txt" in r for r in a2.ledger.rejected_outputs)

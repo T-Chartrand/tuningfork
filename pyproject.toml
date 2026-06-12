@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tuningfork-agent"
-version = "0.2.0"
+version = "0.3.0"
 description = "Grounding rules for LLM agents, derived from human reality-testing"
 readme = "README.md"
 license = {text = "MIT"}

@@ -70,6 +70,37 @@ fed the validator evidence, not an apology prompt. A second failure is
 reported as unresolved, because retrying the same channel is re-checking the
 check.
 
+## The child agent
+
+`v0.3.0` adds a small runnable agent with the overlay on: an ordinary
+tool loop (Anthropic Messages API via stdlib urllib — no SDK) where
+every assistant utterance is validated against evidence built from the
+tools' ACTUAL returns, nonexistent tool calls are refused instead of
+improvised, one evidence-fed correction turn is permitted, and
+rejections persist to a ledger file across sessions — the catalog of
+known fabrications accumulates instead of resetting.
+
+```python
+from tuningfork import AnthropicLLM, ChildAgent, builtin_fs_tools
+
+agent = ChildAgent(AnthropicLLM(), builtin_fs_tools("."))
+result = agent.run("Which files in ./docs mention 'echo'? Cite paths.")
+print(result.trustworthy, result.answer)
+```
+
+MCP servers wire in as first-class tools via a minimal stdlib client
+(newline-delimited JSON-RPC over stdio):
+
+```python
+from tuningfork import MCPServer, mcp_tools
+
+srv = MCPServer(["python3", "my_server.py"], name="files")
+srv.start()
+agent = ChildAgent(AnthropicLLM(), mcp_tools(srv))
+```
+
+See `examples/agent_demo.py` for the runnable version.
+
 ## What this is not
 
 - Not a wrapper that makes a model "more honest." The model is unchanged.

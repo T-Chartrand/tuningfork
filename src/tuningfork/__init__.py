@@ -5,9 +5,14 @@ from .validators import (CitationValidator, EchoValidator, Finding, JsonBlockVal
 from .tiering import Tier, TierDecision, assess
 from .harness import GroundedAgent, GroundedResult
 from .ledger import BiasProfile, RejectionLedger
+from .mcp_client import MCPError, MCPServer, MCPTool
+from .agent import AgentResult, AnthropicLLM, ChildAgent, Tool, builtin_fs_tools, mcp_tools
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = ["CitationValidator", "EchoValidator", "Finding", "JsonBlockValidator", "PathValidator",
            "SymbolValidator", "ValidationReport", "ValidatorBank", "Tier",
            "TierDecision", "assess", "GroundedAgent", "GroundedResult",
-           "BiasProfile", "RejectionLedger"]
+           "BiasProfile", "RejectionLedger",
+           "MCPError", "MCPServer", "MCPTool",
+           "AgentResult", "AnthropicLLM", "ChildAgent", "Tool",
+           "builtin_fs_tools", "mcp_tools"]

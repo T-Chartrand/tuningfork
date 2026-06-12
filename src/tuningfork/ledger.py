@@ -22,7 +22,9 @@ updates the model-of-the-model. It never updates the world model.
 
 from __future__ import annotations
 
+import json
 from collections import Counter
+from pathlib import Path
 from dataclasses import dataclass, field
 
 from .validators import Finding, ValidationReport
@@ -92,3 +94,25 @@ class RejectionLedger:
         re-analyzed (recognition is cheaper than analysis)."""
         return [c for c, n in self._claims.items()
                 if n >= self.recurrence_threshold]
+
+    # -- persistence (G8 across sessions: the library survives restarts) ---
+    def save(self, path) -> None:
+        Path(path).write_text(json.dumps({
+            "rejected_outputs": self.rejected_outputs[-200:],
+            "claims": dict(self._claims),
+            "by_validator": dict(self._by_validator),
+        }, indent=1))
+
+    @classmethod
+    def load(cls, path, recurrence_threshold: int = 2) -> "RejectionLedger":
+        led = cls(recurrence_threshold=recurrence_threshold)
+        p = Path(path)
+        if p.exists():
+            try:
+                d = json.loads(p.read_text())
+                led.rejected_outputs = list(d.get("rejected_outputs", []))
+                led._claims.update(d.get("claims", {}))
+                led._by_validator.update(d.get("by_validator", {}))
+            except (json.JSONDecodeError, OSError):
+                pass  # corrupt ledger: start fresh rather than crash
+        return led

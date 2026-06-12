@@ -135,7 +135,7 @@ def test_docs_rule_count_consistency():
     top = max(int(s[1:]) for s in sections)
 
     # framework header must state the true range
-    header = re.search(r"^## 7\. Grounding Rules \((G\d+)–(G\d+)\)", fw, re.M)
+    header = re.search(r"^## Grounding Rules \((G\d+)–(G\d+)\)", fw, re.M)
     assert header, "framework.md missing rules header"
     assert header.group(2) == f"G{top}", (
         f"stale header: says {header.group(2)}, sections go to G{top}")

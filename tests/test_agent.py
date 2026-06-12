@@ -172,3 +172,23 @@ def test_quote_validator_catches_near_quote(tmp_path):
     assert res.corrected is True              # near-quote caught, turn fired
     assert res.trustworthy                    # verbatim re-quote passes
     assert agent.ledger.profile().rejections_by_validator.get("quote") == 1
+
+
+def test_leaked_text_tool_call_is_salvaged_not_crowned(tmp_path):
+    (tmp_path / "real.txt").write_text("hello")
+    leak = ('brtc\n{"name": "list_dir", "arguments": {"path": "."}}\n'
+            "</tool_call>")
+    llm = scripted_llm([
+        {"content": [text(leak)]},                       # the leak
+        {"content": [text(f"The directory contains real.txt "
+                          f"({tmp_path}/real.txt).")]},  # proper finish
+    ])
+    agent = ChildAgent(llm, builtin_fs_tools(tmp_path),
+                       ledger_path=tmp_path / "l.json")
+    res = agent.run("list the files")
+    assert res.salvaged == 1
+    assert "real.txt" in res.answer          # the leak never became the answer
+    assert res.trustworthy
+    # the salvaged execution's result travelled back as user content
+    assert any(isinstance(m["content"], str) and "Result of list_dir" in m["content"]
+               for m in res.transcript if m["role"] == "user")

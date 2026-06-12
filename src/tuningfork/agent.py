@@ -156,6 +156,7 @@ class AgentResult:
     tier_rationale: str
     reports: list[ValidationReport] = field(default_factory=list)
     corrected: bool = False
+    salvaged: int = 0
     unresolved: list[str] = field(default_factory=list)
     transcript: list[dict] = field(default_factory=list)
 
@@ -207,6 +208,24 @@ class ChildAgent:
         except Exception as e:                      # noqa: BLE001
             return f"TOOL ERROR ({name}): {e}", True
 
+    _LEAKED_CALL = re.compile(
+        r"\{\s*\"name\"\s*:\s*\"([\w.\-]+)\"\s*,\s*\"arguments\"\s*:\s*(\{.*?\})\s*\}",
+        re.DOTALL)
+
+    def _salvage_leaked_calls(self, text: str) -> list[tuple[str, dict]]:
+        """Small local models sometimes emit their tool-call format as
+        plain text (<tool_call> tags, raw JSON) instead of structured
+        calls. The attempt is unambiguous and deterministically
+        parseable, so the loop salvages it rather than crowning the
+        leak as a final answer."""
+        calls = []
+        for name, args_raw in self._LEAKED_CALL.findall(text):
+            try:
+                calls.append((name, json.loads(args_raw)))
+            except json.JSONDecodeError:
+                calls.append((name, {}))
+        return calls
+
     # -- the loop ------------------------------------------------------------
     def run(self, task: str, destructive: bool = False) -> AgentResult:
         tier = assess(task, destructive=destructive)
@@ -220,6 +239,7 @@ class ChildAgent:
         specs = [t.spec() for t in self.tools.values()]
         reports: list[ValidationReport] = []
         corrected = False
+        salvaged = 0
 
         for _ in range(self.max_turns):
             resp = self.llm(messages, specs, SYSTEM)
@@ -229,6 +249,24 @@ class ChildAgent:
             text = "\n".join(b.get("text", "") for b in content
                              if b.get("type") == "text")
             tool_uses = [b for b in content if b.get("type") == "tool_use"]
+
+            # Salvage: tool call leaked into the text channel?
+            if not tool_uses and text:
+                leaked = self._salvage_leaked_calls(text)
+                if leaked:
+                    salvaged += len(leaked)
+                    parts = []
+                    for name, args in leaked:
+                        out, _err = self._execute(name, args)
+                        parts.append(f"Result of {name}({json.dumps(args)}):"
+                                     f"\n{out}")
+                    messages.append({"role": "user", "content":
+                        "[GROUNDING] Your tool call was emitted as plain "
+                        "text instead of a structured call. It was executed "
+                        "anyway:\n\n" + "\n\n".join(parts) +
+                        "\n\nContinue the task, and emit tool calls "
+                        "properly, not as text."})
+                    continue
 
             # G7: validate every assistant utterance against evidence
             if text.strip():
@@ -265,12 +303,13 @@ class ChildAgent:
                           if reports and not reports[-1].clean else [])
             return AgentResult(answer=text, tier_rationale=tier.rationale,
                                reports=reports, corrected=corrected,
-                               unresolved=unresolved, transcript=messages)
+                               salvaged=salvaged, unresolved=unresolved,
+                               transcript=messages)
 
         self.ledger.save(self.ledger_path)
         return AgentResult(answer="(max turns reached)",
                            tier_rationale=tier.rationale, reports=reports,
-                           corrected=corrected,
+                           corrected=corrected, salvaged=salvaged,
                            unresolved=["max turns reached"],
                            transcript=messages)
 

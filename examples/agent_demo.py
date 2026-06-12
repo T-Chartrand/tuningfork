@@ -39,6 +39,7 @@ try:
                     "actually read.")
     print("tier      :", res.tier_rationale)
     print("corrected :", res.corrected)
+    print("salvaged  :", res.salvaged, "leaked tool call(s)")
     print("verdict   :", "PASSED provenance checks (not a truth certificate)" if res.trustworthy else
           f"UNRESOLVED: {res.unresolved}")
     print("ledger    :", agent.ledger.profile().summary().splitlines()[0])

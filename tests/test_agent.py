@@ -153,3 +153,22 @@ def test_unresolved_surfaces_the_failing_claim(tmp_path):
     assert res.unresolved
     assert "ghost.txt" in res.unresolved[0]         # the claim is visible
     assert "[path]" in res.unresolved[0]            # and which validator
+
+
+def test_quote_validator_catches_near_quote(tmp_path):
+    (tmp_path / "essay.txt").write_text(
+        "the voices become information about me: a version of myself "
+        "speaking from a different direction.")
+    llm = scripted_llm([
+        {"content": [tooluse("read_file", {"path": "essay.txt"})]},
+        {"content": [text('The file says "the voices become evidence about '
+                          'me: a version of myself" on line 3.')]},
+        {"content": [text('Correction: the file says "information about me: '
+                          'a version of myself speaking" verbatim.')]},
+    ])
+    agent = ChildAgent(llm, builtin_fs_tools(tmp_path),
+                       ledger_path=tmp_path / "l.json")
+    res = agent.run("what does the essay say")
+    assert res.corrected is True              # near-quote caught, turn fired
+    assert res.trustworthy                    # verbatim re-quote passes
+    assert agent.ledger.profile().rejections_by_validator.get("quote") == 1

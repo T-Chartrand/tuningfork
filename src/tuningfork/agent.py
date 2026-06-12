@@ -37,7 +37,8 @@ from .ledger import RejectionLedger
 from .mcp_client import MCPServer
 from .tiering import Tier, assess
 from .validators import (CitationValidator, EchoValidator, JsonBlockValidator,
-                         PathValidator, ValidationReport, ValidatorBank)
+                         PathValidator, QuoteValidator, ValidationReport,
+                         ValidatorBank)
 
 _PATHISH = re.compile(r"(?:(?:[A-Za-z]:\\|/|\./)(?:[\w.\-]+[/\\])*[\w.\-]+(?:\.\w{1,8})?)")
 
@@ -160,6 +161,9 @@ class AgentResult:
 
     @property
     def trustworthy(self) -> bool:
+        """True means PASSED PROVENANCE CHECKS: paths trace, quotes are
+        verbatim, JSON parses, no echo. It is not a truth certificate —
+        semantic claims with no checkable surface pass unexamined."""
         return not self.unresolved
 
 
@@ -173,6 +177,7 @@ class ChildAgent:
         self.ledger_path = Path(ledger_path)
         self.ledger = RejectionLedger.load(self.ledger_path)
         self.evidence_paths: set[str] = set()
+        self.evidence_text: list[str] = []
 
     # -- overlay pieces ----------------------------------------------------
     def _bank(self) -> ValidatorBank:
@@ -180,6 +185,7 @@ class ChildAgent:
             PathValidator(evidence_paths=self.evidence_paths, check_disk=True),
             JsonBlockValidator(),
             EchoValidator(rejected_history=self.ledger.rejected_outputs),
+            QuoteValidator(evidence_text="\n".join(self.evidence_text)),
         ])
 
     def _register_evidence(self, text: str) -> None:
@@ -194,6 +200,7 @@ class ChildAgent:
                     f"{sorted(self.tools)}", True)
         try:
             out = tool.fn(args)
+            self.evidence_text.append(out)
             self._register_evidence(out)
             self._register_evidence(json.dumps(args))
             return out, False

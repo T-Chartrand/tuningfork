@@ -245,6 +245,40 @@ class EchoValidator:
         return findings
 
 
+
+
+class QuoteValidator:
+    """Quoted text is a provenance claim: the model asserts these exact
+    words exist in its sources. That is deterministically checkable —
+    every quoted span of substance must appear verbatim (whitespace-
+    normalized) in the accumulated tool-result evidence. Near-quotes are
+    fabrications wearing quotation marks.
+
+    First caught in the wild: a 7B model citing three "excerpts" to
+    support a claim, one of which read 'evidence about *me*' where the
+    source said 'information about *me*'."""
+
+    name = "quote"
+    _QUOTED = re.compile(r'"([^"\n]{15,300})"')
+
+    def __init__(self, evidence_text: str = ""):
+        self.evidence = re.sub(r"\s+", " ", evidence_text)
+
+    def run(self, output: str) -> list[Finding]:
+        findings = []
+        for span in set(self._QUOTED.findall(output)):
+            norm = re.sub(r"\s+", " ", span).strip()
+            passed = norm in self.evidence
+            findings.append(Finding(
+                validator=self.name, claim=span[:80], passed=passed,
+                severity="high",
+                evidence=("found verbatim in tool results" if passed else
+                          "quoted text does NOT appear verbatim in any "
+                          "tool result this session"),
+            ))
+        return findings
+
+
 # --------------------------------------------------------------------------
 # Runner
 # --------------------------------------------------------------------------

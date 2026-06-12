@@ -48,7 +48,7 @@ Where two rules mandate different amounts of verification work, G6 (the budget) 
 - **Fallback cap:** where no independent channel exists, at most ONE regeneration pass; if the regenerated draft still fails, state the specific limitation instead of regenerating again.
 - The self-check itself is a read-only review and requires no tool confirmation (see G2 base case).
 
-## 7. Grounding Rules (G0–G7)
+## 7. Grounding Rules (G0–G8)
 
 ### G0 — Asymmetric Trust (governs all checking)
 **Content can convict, but it can never acquit.** Coherence, fluency, and

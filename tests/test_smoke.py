@@ -119,3 +119,30 @@ def test_ledger_ignores_clean_reports():
     ledger.record("Per [1], all good.", report)
     assert ledger.profile().total_rejections == 0
     assert ledger.known_signatures() == []
+
+
+def test_docs_rule_count_consistency():
+    """Known signature: rule-count headers go stale when rules are added.
+    This validator counts actual sections and fails on any disagreement —
+    the doc equivalent of not trusting the narrative about its own state."""
+    import re, pathlib
+    root = pathlib.Path(__file__).resolve().parents[1]
+    fw = (root / "docs" / "framework.md").read_text()
+    readme = (root / "README.md").read_text()
+
+    sections = re.findall(r"^### (G\d+) —", fw, re.M)
+    n = len(sections)
+    top = max(int(s[1:]) for s in sections)
+
+    # framework header must state the true range
+    header = re.search(r"^## 7\. Grounding Rules \((G\d+)–(G\d+)\)", fw, re.M)
+    assert header, "framework.md missing rules header"
+    assert header.group(2) == f"G{top}", (
+        f"stale header: says {header.group(2)}, sections go to G{top}")
+
+    # README table must have one row per rule, and its count word must match
+    rows = re.findall(r"^\| \*\*G\d+\*\*", readme, re.M)
+    assert len(rows) == n, f"README table has {len(rows)} rows, framework has {n} rules"
+    words = {7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve"}
+    assert f"The {words[n]} rules" in readme, (
+        f"README heading disagrees with actual rule count {n}")

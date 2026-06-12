@@ -80,3 +80,22 @@ def test_ledger_persists_across_agent_instances(tmp_path):
     # fresh instance loads the prior session's rejections (the library)
     a2 = ChildAgent(scripted_llm([]), [], ledger_path=tmp_path / "l.json")
     assert any("one.txt" in r for r in a2.ledger.rejected_outputs)
+
+
+def test_anthropic_llm_surfaces_api_errors_readably(monkeypatch):
+    import io, urllib.error, urllib.request
+    from tuningfork import AnthropicLLM
+
+    def fake_urlopen(req, timeout=0):
+        raise urllib.error.HTTPError(
+            req.full_url, 401, "Unauthorized", {},
+            io.BytesIO(b'{"error":{"message":"invalid x-api-key"}}'))
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    llm = AnthropicLLM(); llm.api_key = "sk-ant-placeholder"
+    try:
+        llm([], [], "")
+        assert False, "should have raised"
+    except RuntimeError as e:
+        msg = str(e)
+        assert "401" in msg and "invalid x-api-key" in msg
+        assert "console.anthropic.com" in msg     # the hint travels

@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -66,8 +67,23 @@ class AnthropicLLM:
             headers={"content-type": "application/json",
                      "x-api-key": self.api_key,
                      "anthropic-version": "2023-06-01"})
-        with urllib.request.urlopen(req, timeout=120) as r:
-            return json.loads(r.read())
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = json.loads(e.read()).get("error", {}).get("message", "")
+            except Exception:                       # noqa: BLE001
+                pass
+            hints = {401: "API key rejected — check ANTHROPIC_API_KEY is a "
+                          "real key from console.anthropic.com (the API is "
+                          "separate from a claude.ai subscription)",
+                     429: "rate limited — slow down or check your tier",
+                     400: "bad request — often an invalid model name"}
+            raise RuntimeError(
+                f"Anthropic API HTTP {e.code}: {detail or e.reason}. "
+                f"{hints.get(e.code, '')}".strip()) from None
 
 
 # --------------------------------------------------------------------------

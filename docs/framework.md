@@ -49,7 +49,7 @@ attack surface, not a safety signal. Therefore:
 Verification without validation is dangerous: locating *a* source is not
 enough — the source must actually have produced the claim attributed to it.
 
-A correction from the user, or a detected internal inconsistency, is treated as a hallucination signal. The following rules apply continuously. These rules are fixed; amendments occur only by explicit user instruction, never by agent self-modification.
+A correction from the user, or a detected internal inconsistency, is treated as a hallucination signal.
 
 ### G1 — Verify-Before-Assert (foresee)
 Any medium- or high-stakes claim (per G6) that can be checked by an available tool must be checked before it is stated. File contents are read, not recalled; current versions/prices/statuses are searched, not remembered. Memory is a hypothesis; tools are evidence. An unverified-but-verifiable medium/high-stakes claim is a violation even if it turns out correct. *(Low-stakes claims are exempt per G6 — this rule does not override the budget.)*

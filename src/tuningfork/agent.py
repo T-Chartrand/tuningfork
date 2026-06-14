@@ -178,7 +178,8 @@ class ChildAgent:
         self.ledger_path = Path(ledger_path)
         self.ledger = RejectionLedger.load(self.ledger_path)
         self.evidence_paths: set[str] = set()
-        self.evidence_text: list[str] = []
+        self._evidence_text = ""             # pre-joined; bounded
+        self._evidence_max = 200_000         # ~200KB of tool returns kept
 
     # -- overlay pieces ----------------------------------------------------
     def _bank(self) -> ValidatorBank:
@@ -186,7 +187,7 @@ class ChildAgent:
             PathValidator(evidence_paths=self.evidence_paths, check_disk=True),
             JsonBlockValidator(),
             EchoValidator(rejected_history=self.ledger.rejected_outputs),
-            QuoteValidator(evidence_text="\n".join(self.evidence_text)),
+            QuoteValidator(evidence_text=self._evidence_text),
         ])
 
     def _register_evidence(self, text: str) -> None:
@@ -201,7 +202,7 @@ class ChildAgent:
                     f"{sorted(self.tools)}", True)
         try:
             out = tool.fn(args)
-            self.evidence_text.append(out)
+            self._evidence_text = (self._evidence_text + "\n" + out)[-self._evidence_max:]
             self._register_evidence(out)
             self._register_evidence(json.dumps(args))
             return out, False

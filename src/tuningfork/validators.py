@@ -79,12 +79,18 @@ class PathValidator:
     def __init__(self, evidence_paths: Iterable[str] = (), check_disk: bool = True):
         self.evidence = {str(p) for p in evidence_paths}
         self.check_disk = check_disk
+        self._exists_cache: dict[str, bool] = {}
+
+    def _exists(self, p: str) -> bool:
+        if p not in self._exists_cache:
+            self._exists_cache[p] = Path(p).exists()
+        return self._exists_cache[p]
 
     def run(self, output: str) -> list[Finding]:
         findings = []
         for match in set(self._PATTERN.findall(output)):
             in_evidence = match in self.evidence
-            on_disk = self.check_disk and Path(match).exists()
+            on_disk = self.check_disk and self._exists(match)
             passed = in_evidence or on_disk
             findings.append(Finding(
                 validator=self.name,
@@ -155,22 +161,25 @@ class SymbolValidator:
         self.allow_builtins = allow_builtins
         self._builtins = set(dir(__builtins__)) if allow_builtins else set()
 
+    _cache: dict[tuple[str, str], bool] = {}
+
     def _grep(self, symbol: str) -> bool:
         leaf = symbol.split(".")[-1]
+        key = (str(self.root), leaf)
+        if key in self._cache:
+            return self._cache[key]
         try:
+            # one subprocess instead of two: alternation matches def OR class
             r = subprocess.run(
-                ["grep", "-rIl", "--include=*.py", f"def {leaf}", str(self.root)],
+                ["grep", "-rIlE", "--include=*.py",
+                 f"^(def|class) {leaf}\\b", str(self.root)],
                 capture_output=True, text=True, timeout=10,
             )
-            if r.stdout.strip():
-                return True
-            r2 = subprocess.run(
-                ["grep", "-rIl", "--include=*.py", f"class {leaf}", str(self.root)],
-                capture_output=True, text=True, timeout=10,
-            )
-            return bool(r2.stdout.strip())
+            found = bool(r.stdout.strip())
         except (subprocess.TimeoutExpired, FileNotFoundError):
-            return True  # cannot check -> do not accuse; fail open, flag nothing
+            found = True  # cannot check -> do not accuse; fail open
+        self._cache[key] = found
+        return found
 
     def run(self, output: str, symbols: Iterable[str] | None = None) -> list[Finding]:
         if symbols is None:
@@ -209,6 +218,7 @@ class EchoValidator:
 
     name = "echo"
     _SENT = re.compile(r"[^.!?\n]{20,}[.!?]")  # sentences of substance only
+    _WS = re.compile(r"\s+")
 
     def __init__(self, rejected_history: Iterable[str] = ()):
         self.rejected: set[str] = set()
@@ -216,9 +226,9 @@ class EchoValidator:
             self.rejected.update(self._normalize(s)
                                  for s in self._SENT.findall(prior))
 
-    @staticmethod
-    def _normalize(s: str) -> str:
-        return re.sub(r"\s+", " ", s).strip().lower()
+    @classmethod
+    def _normalize(cls, s: str) -> str:
+        return cls._WS.sub(" ", s).strip().lower()
 
     def run(self, output: str) -> list[Finding]:
         findings = []
@@ -260,14 +270,15 @@ class QuoteValidator:
 
     name = "quote"
     _QUOTED = re.compile(r'"([^"\n]{15,300})"')
+    _WS = re.compile(r"\s+")
 
     def __init__(self, evidence_text: str = ""):
-        self.evidence = re.sub(r"\s+", " ", evidence_text)
+        self.evidence = self._WS.sub(" ", evidence_text)
 
     def run(self, output: str) -> list[Finding]:
         findings = []
         for span in set(self._QUOTED.findall(output)):
-            norm = re.sub(r"\s+", " ", span).strip()
+            norm = self._WS.sub(" ", span).strip()
             passed = norm in self.evidence
             findings.append(Finding(
                 validator=self.name, claim=span[:80], passed=passed,

@@ -192,3 +192,24 @@ def test_leaked_text_tool_call_is_salvaged_not_crowned(tmp_path):
     # the salvaged execution's result travelled back as user content
     assert any(isinstance(m["content"], str) and "Result of list_dir" in m["content"]
                for m in res.transcript if m["role"] == "user")
+
+
+def test_evidence_text_is_bounded_not_quadratic(tmp_path):
+    """Before this fix, evidence_text was a list joined on every validator
+    call — O(n^2) over a long-running session. Cap is now declarative."""
+    big = "X" * 50_000
+    (tmp_path / "a.txt").write_text(big)
+    llm = scripted_llm([
+        {"content": [tooluse("read_file", {"path": "a.txt"}, i="t1")]},
+        {"content": [tooluse("read_file", {"path": "a.txt"}, i="t2")]},
+        {"content": [tooluse("read_file", {"path": "a.txt"}, i="t3")]},
+        {"content": [tooluse("read_file", {"path": "a.txt"}, i="t4")]},
+        {"content": [tooluse("read_file", {"path": "a.txt"}, i="t5")]},
+        {"content": [text("done")]},
+    ])
+    agent = ChildAgent(llm, builtin_fs_tools(tmp_path),
+                       ledger_path=tmp_path / "l.json")
+    agent._evidence_max = 60_000              # bound for the test
+    agent.run("read it many times")
+    assert isinstance(agent._evidence_text, str)
+    assert len(agent._evidence_text) <= agent._evidence_max + 100
